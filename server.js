@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
+const serverport = process.env.OPENSHIFT_NODEJS_PORT || 8080;
 
-const server = new WebSocket.Server({ port: 3000 });
+const server = new WebSocket.Server({ port: serverport });
 
 const sendMsg = (data) => {
 
