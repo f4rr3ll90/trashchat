@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Bernard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous" />
+    <style>
+        .Related {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="container">
+
+            <div class="row">
+                <div v-if="!ready">
+                    <h4>Имя пользователя:</h4>
+                    <form @submit.prevent="addUser">
+                        <div class="form-group row">
+                            <input type="text" class="form-control col-9" v-model="username" placeholder="Enter username here">
+                            <input type="submit" value="Join" class="btn btn-sm btn-info ml-1">
+
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="row">
+
+                <div class="col-sm-8" v-if="showPost">
+                    <button class="button" @click="back()">Назад</button>
+                    <h1>{{ post.second_title }}</h1>
+                    <img class="img-fluid" v-bind:src="'https://meduza.io'+ post.prefs.inner.elements.image.large_url" alt="" @click="loadPost(post.url)">
+                    <div v-html=" post.content.body"></div>
+                </div>
+
+                <div class="col-sm-8" v-if="showNews">
+                    <div class="post" v-for="post in news">
+                        <img class="img-fluid" v-bind:src="'https://meduza.io'+ post.prefs.outer.elements.image.small_url" alt="" @click="loadPost(post.url)">
+                        <h4>
+                            {{ post.title }}
+                        </h4>
+                        <hr>
+                    </div>
+                </div>
+
+                <div class="col-sm-4">
+                    <div class="card bg-dark" v-if="ready">
+                        <div class="card-header text-white">
+                            <h4>{{username}} <span class="float-right">{{connections}} connections</span></h4>
+                        </div>
+                        <ul class="list-group list-group-flush text-right">
+                            <small v-if="typing" class="text-white">{{typing}} is typing</small>
+                            <li class="list-group-item" v-for="message in messages">
+                                <span :class="{'float-left':message.user !== username}">
+                                    {{message.message}}
+                                    <small>:{{message.user}}</small>
+                                </span>
+                            </li>
+                        </ul>
+
+                        <div class="card-body">
+                            <form @submit.prevent="send">
+                                <div class="form-group">
+                                    <input type="text" class="form-control" v-model="newMessage" placeholder="Enter message here">
+                                </div>
+                            </form>
+                        </div>
+                        <div class="card-footer">
+                            <div v-if="ready">
+                                <p v-for="user in info">
+                                    {{user.username}} {{user.type}}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+
+</body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.2/axios.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.10/vue.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+    var socket = io();
+    let vue = new Vue({
+        el: '#app',
+
+        data: {
+            newMessage: null,
+            messages: [],
+            typing: false,
+            username: localStorage.getItem('username') || null,
+            ready: localStorage.getItem('username') || false,
+            info: [],
+            connections: 0,
+            news: [],
+            post: [],
+            showNews: true,
+            showPost: false,
+        },
+
+        created() {
+            window.onbeforeunload = () => {
+                socket.emit('leave', this.username);
+            }
+
+            socket.on('chat-message', (data) => {
+                this.messages.push({
+                    message: data.message,
+                    user: data.user,
+                });
+            });
+
+
+
+            socket.on('typing', (data) => {
+                this.typing = data;
+            });
+
+            socket.on('stopTyping', () => {
+                this.typing = false;
+            });
+
+            socket.on('joined', (data) => {
+                this.messages.push({
+                    message: data.message,
+                    user: data.user,
+                });
+                this.info.push({
+                    username: data,
+                    type: 'joined'
+                });
+
+                setTimeout(() => {
+                    this.info = [];
+                }, 5000);
+            });
+
+            socket.on('leave', (data) => {
+                this.info.push({
+                    username: data,
+                    type: 'left'
+                });
+
+                setTimeout(() => {
+                    this.info = [];
+                }, 5000);
+            });
+
+            socket.on('connections', (data) => {
+                this.connections = data;
+            });
+
+
+            fetch('https://salty-everglades-44479.herokuapp.com/news')
+                .then((response) => {
+                    return response.json();
+                })
+                .then((data) => {
+                    console.log("!!! ╰(*°▽°*)╯ !!!");
+                    // console.log(data.data);
+                    this.news = data;
+                });
+            fetch('https://salty-everglades-44479.herokuapp.com/history')
+                .then((response) => {
+                    return response.json();
+                })
+                .then((data) => {
+                    console.log(data);
+                    this.messages = data;
+                });
+
+            socket.emit('joined', {
+                message: "Пользователь " + this.username + " вошёл в чат.",
+                user: "ИНФО"
+            });
+
+            //                 this.messages.push();
+
+        },
+
+        watch: {
+            newMessage(value) {
+                value ? socket.emit('typing', this.username) : socket.emit('stopTyping')
+            }
+        },
+
+        methods: {
+            send() {
+                this.messages.push({
+                    message: this.newMessage,
+                    user: this.username,
+                });
+
+                socket.emit('chat-message', {
+                    message: this.newMessage,
+                    user: this.username
+                });
+                this.newMessage = null;
+            },
+
+            addUser() {
+                this.ready = true;
+                socket.emit('joined', {
+                    message: "Пользователь " + this.username + " вошёл в чат.",
+                    user: "ИНФО"
+                });
+                localStorage.setItem('username', this.username);
+            },
+
+            loadPost(url) {
+                fetch('https://salty-everglades-44479.herokuapp.com/post', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            post: {
+                                url: url
+                            }
+                        })
+                    }).then((response) => {
+                        return response.json();
+                    })
+                    .then((data) => {
+                        console.log(data);
+                        this.post = data.root;
+                        this.showNews = false;
+                        this.showPost = true;
+                    });
+            },
+            back() {
+                this.showNews = true;
+                this.showPost = false;
+            }
+
+        },
+
+    });
+</script>
+
+</html>
